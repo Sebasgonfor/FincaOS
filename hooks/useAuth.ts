@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase/client';
+import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase/client';
 import { Perfil } from '@/types/database';
 
 export function useAuth() {
@@ -11,40 +12,36 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchPerfil(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchPerfil(session.user.id);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        await fetchPerfil(firebaseUser.uid);
       } else {
         setPerfil(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   async function fetchPerfil(userId: string) {
-    const { data } = await supabase
-      .from('perfiles')
-      .select('*, comunidad:comunidades(*)')
-      .eq('id', userId)
-      .maybeSingle();
-    setPerfil(data as Perfil | null);
+    const perfilSnap = await getDoc(doc(db, 'perfiles', userId));
+    if (perfilSnap.exists()) {
+      const perfilData = { id: perfilSnap.id, ...perfilSnap.data() } as Perfil;
+      if (perfilData.comunidad_id) {
+        const comunidadSnap = await getDoc(doc(db, 'comunidades', perfilData.comunidad_id));
+        if (comunidadSnap.exists()) {
+          perfilData.comunidad = { id: comunidadSnap.id, ...comunidadSnap.data() } as any;
+        }
+      }
+      setPerfil(perfilData);
+    }
     setLoading(false);
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await firebaseSignOut(auth);
   }
 
   return { user, perfil, loading, signOut };

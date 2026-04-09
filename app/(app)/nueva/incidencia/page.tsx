@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CircleCheck as CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, getDocs, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { CategoriaIncidencia } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -33,15 +34,18 @@ export default function NuevaIncidenciaPage() {
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [prioridad, setPrioridad] = useState('normal');
   const [ubicacion, setUbicacion] = useState('Zona común');
 
   useEffect(() => {
-    supabase.from('categorias_incidencia').select('*').then(({ data }) => setCategorias(data || []));
+    getDocs(collection(db, 'categorias_incidencia')).then((snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as CategoriaIncidencia[];
+      setCategorias(data);
+    });
   }, []);
 
-  function calcularEstimacion(catId: number | null) {
+  function calcularEstimacion(catId: string | null) {
     const cat = categorias.find((c) => c.id === catId);
     const nombre = cat?.nombre?.toLowerCase() || '';
     if (nombre.includes('font')) return { min: 80, max: 400 };
@@ -52,7 +56,7 @@ export default function NuevaIncidenciaPage() {
     return { min: 100, max: 600 };
   }
 
-  function handleCategoriaChange(id: number) {
+  function handleCategoriaChange(id: string) {
     setCategoriaId(id);
     setEstimacion(calcularEstimacion(id));
   }
@@ -65,21 +69,24 @@ export default function NuevaIncidenciaPage() {
     setLoading(true);
     const est = estimacion || { min: 100, max: 600 };
 
-    const { error } = await supabase.from('incidencias').insert({
-      comunidad_id: perfil.comunidad_id,
-      autor_id: perfil.id,
-      titulo: titulo.trim(),
-      descripcion: descripcion.trim() || null,
-      categoria_id: categoriaId,
-      prioridad,
-      ubicacion,
-      estimacion_min: est.min,
-      estimacion_max: est.max,
-    });
+    try {
+      await addDoc(collection(db, 'incidencias'), {
+        comunidad_id: perfil.comunidad_id,
+        autor_id: perfil.id,
+        titulo: titulo.trim(),
+        descripcion: descripcion.trim() || null,
+        categoria_id: categoriaId,
+        prioridad,
+        ubicacion,
+        estimacion_min: est.min,
+        estimacion_max: est.max,
+      });
+      setEnviado(true);
+    } catch {
+      toast.error('Error al crear la incidencia');
+    }
 
     setLoading(false);
-    if (error) { toast.error('Error al crear la incidencia'); }
-    else { setEnviado(true); }
   }
 
   if (enviado) {

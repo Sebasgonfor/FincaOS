@@ -25,7 +25,7 @@ export interface Perfil {
 }
 
 export interface CategoriaIncidencia {
-  id: number;
+  id: string;
   nombre: string;
   icono: string | null;
 }
@@ -52,7 +52,7 @@ export interface Incidencia {
   id: string;
   comunidad_id: string;
   autor_id: string;
-  categoria_id: number | null;
+  categoria_id: string | null;
   titulo: string;
   descripcion: string | null;
   estado: EstadoIncidencia;

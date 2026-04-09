@@ -6,7 +6,8 @@ import { ArrowLeft, Clock, MessageSquare, Send, MapPin, Tag, UserPlus, UserMinus
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, getDoc, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Comentario } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ export default function IncidenciaDetailPage() {
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [afectados, setAfectados] = useState<{ vecino_id: string }[]>([]);
+  const [afectados, setAfectados] = useState<{ id: string; vecino_id: string }[]>([]);
   const [sumandome, setSumandome] = useState(false);
 
   useEffect(() => {
@@ -45,24 +46,61 @@ export default function IncidenciaDetailPage() {
   }, [params.id]);
 
   async function fetchIncidencia() {
-    const { data } = await supabase
-      .from('incidencias')
-      .select('*, autor:perfiles(id, nombre_completo, numero_piso), categoria:categorias_incidencia(nombre, icono)')
-      .eq('id', params.id)
-      .maybeSingle();
-    if (data) setIncidencia(data as Incidencia);
-    const { data: comData } = await supabase
-      .from('comentarios')
-      .select('*, autor:perfiles(id, nombre_completo, numero_piso)')
-      .eq('incidencia_id', params.id)
-      .order('created_at', { ascending: true });
-    setComentarios((comData as Comentario[]) || []);
+    const incSnap = await getDoc(doc(db, 'incidencias', params.id as string));
+    if (incSnap.exists()) {
+      const incData: any = { id: incSnap.id, ...incSnap.data() };
+
+      if (incData.autor_id) {
+        const autorSnap = await getDoc(doc(db, 'perfiles', incData.autor_id));
+        if (autorSnap.exists()) {
+          const a = autorSnap.data();
+          incData.autor = { id: autorSnap.id, nombre_completo: a.nombre_completo, numero_piso: a.numero_piso };
+        }
+      }
+
+      if (incData.categoria_id) {
+        const catSnap = await getDoc(doc(db, 'categorias_incidencia', incData.categoria_id));
+        if (catSnap.exists()) {
+          const c = catSnap.data();
+          incData.categoria = { nombre: c.nombre, icono: c.icono };
+        }
+      }
+
+      setIncidencia(incData as Incidencia);
+    }
+
+    const comQ = query(
+      collection(db, 'comentarios'),
+      where('incidencia_id', '==', params.id),
+      orderBy('created_at', 'asc')
+    );
+    const comSnap = await getDocs(comQ);
+    const comItems = comSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+
+    const enrichedComs = await Promise.all(
+      comItems.map(async (com) => {
+        if (com.autor_id) {
+          const autorSnap = await getDoc(doc(db, 'perfiles', com.autor_id));
+          if (autorSnap.exists()) {
+            const a = autorSnap.data();
+            com.autor = { id: autorSnap.id, nombre_completo: a.nombre_completo, numero_piso: a.numero_piso };
+          }
+        }
+        return com;
+      })
+    );
+
+    setComentarios(enrichedComs as Comentario[]);
     setLoading(false);
   }
 
   async function fetchAfectados() {
-    const { data } = await supabase.from('incidencia_afectados').select('vecino_id').eq('incidencia_id', params.id);
-    setAfectados(data || []);
+    const q = query(
+      collection(db, 'incidencia_afectados'),
+      where('incidencia_id', '==', params.id)
+    );
+    const snap = await getDocs(q);
+    setAfectados(snap.docs.map(d => ({ id: d.id, vecino_id: d.data().vecino_id })));
   }
 
   const yaSumado = afectados.some((a) => a.vecino_id === perfil?.id);
@@ -72,12 +110,27 @@ export default function IncidenciaDetailPage() {
     if (!perfil || esAutor) return;
     setSumandome(true);
     if (yaSumado) {
-      await supabase.from('incidencia_afectados').delete().eq('incidencia_id', params.id).eq('vecino_id', perfil.id);
+      const q = query(
+        collection(db, 'incidencia_afectados'),
+        where('incidencia_id', '==', params.id),
+        where('vecino_id', '==', perfil.id)
+      );
+      const snap = await getDocs(q);
+      const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'incidencia_afectados', d.id)));
+      await Promise.all(deletePromises);
       toast.success('Ya no apareces como afectado');
       fetchAfectados();
     } else {
-      const { error } = await supabase.from('incidencia_afectados').insert({ incidencia_id: params.id as string, vecino_id: perfil.id });
-      if (!error) { toast.success('Te has sumado a la incidencia'); fetchAfectados(); }
+      try {
+        await addDoc(collection(db, 'incidencia_afectados'), {
+          incidencia_id: params.id as string,
+          vecino_id: perfil.id,
+        });
+        toast.success('Te has sumado a la incidencia');
+        fetchAfectados();
+      } catch {
+        toast.error('Error al sumarte a la incidencia');
+      }
     }
     setSumandome(false);
   }
@@ -85,9 +138,18 @@ export default function IncidenciaDetailPage() {
   async function enviarComentario() {
     if (!nuevoComentario.trim() || !perfil) return;
     setEnviando(true);
-    const { error } = await supabase.from('comentarios').insert({ incidencia_id: params.id, autor_id: perfil.id, contenido: nuevoComentario.trim() });
-    if (error) { toast.error('Error al enviar el comentario'); }
-    else { setNuevoComentario(''); fetchIncidencia(); }
+    try {
+      await addDoc(collection(db, 'comentarios'), {
+        incidencia_id: params.id,
+        autor_id: perfil.id,
+        contenido: nuevoComentario.trim(),
+        created_at: new Date().toISOString(),
+      });
+      setNuevoComentario('');
+      fetchIncidencia();
+    } catch {
+      toast.error('Error al enviar el comentario');
+    }
     setEnviando(false);
   }
 

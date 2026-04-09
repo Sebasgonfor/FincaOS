@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Users, TrendingUp, Clock, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,13 +37,36 @@ export default function AdminDashboard() {
 
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
-    const [incRes, vecRes] = await Promise.all([
-      supabase.from('incidencias').select('*, autor:perfiles(nombre_completo), categoria:categorias_incidencia(nombre)').eq('comunidad_id', cid).order('created_at', { ascending: false }),
-      supabase.from('perfiles').select('id', { count: 'exact' }).eq('comunidad_id', cid),
-    ]);
 
-    setIncidencias((incRes.data as Incidencia[]) || []);
-    setVecinos(vecRes.count || 0);
+    // Fetch incidencias
+    const incQuery = query(
+      collection(db, 'incidencias'),
+      where('comunidad_id', '==', cid),
+      orderBy('created_at', 'desc')
+    );
+    const incSnap = await getDocs(incQuery);
+    const incList: Incidencia[] = [];
+    for (const d of incSnap.docs) {
+      const data = { id: d.id, ...d.data() } as Incidencia;
+      // Fetch autor
+      if (data.autor_id) {
+        const autorSnap = await getDoc(doc(db, 'perfiles', data.autor_id));
+        if (autorSnap.exists()) {
+          data.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+        }
+      }
+      incList.push(data);
+    }
+
+    // Count vecinos
+    const vecQuery = query(
+      collection(db, 'perfiles'),
+      where('comunidad_id', '==', cid)
+    );
+    const vecSnap = await getDocs(vecQuery);
+
+    setIncidencias(incList);
+    setVecinos(vecSnap.size);
     setLoading(false);
   }
 

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Clock, TrendingUp, ChevronRight, Plus, Share2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Anuncio } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -43,45 +44,44 @@ export default function InicioPage() {
   }, [comunidadId]);
 
   async function fetchData() {
-    const [incRes, anuncRes, statsRes] = await Promise.all([
-      supabase
-        .from('incidencias')
-        .select('*, autor:perfiles(nombre_completo), categoria:categorias_incidencia(nombre, icono)')
-        .eq('comunidad_id', comunidadId)
-        .order('created_at', { ascending: false })
-        .limit(5),
-      supabase
-        .from('anuncios')
-        .select('*, autor:perfiles(nombre_completo)')
-        .eq('comunidad_id', comunidadId)
-        .order('fijado', { ascending: false })
-        .order('publicado_at', { ascending: false })
-        .limit(3),
-      supabase
-        .from('incidencias')
-        .select('estado')
-        .eq('comunidad_id', comunidadId),
+    const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
+      getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId), orderBy('created_at', 'desc'), limit(5))),
+      getDocs(query(collection(db, 'anuncios'), where('comunidad_id', '==', comunidadId), orderBy('publicado_at', 'desc'), limit(3))),
+      getDocs(query(collection(db, 'incidencias'), where('comunidad_id', '==', comunidadId))),
     ]);
 
-    if (incRes.data) setIncidencias(incRes.data as Incidencia[]);
-    if (anuncRes.data) setAnuncios(anuncRes.data as Anuncio[]);
-    if (statsRes.data) {
-      const abiertas = statsRes.data.filter((i) => !['resuelta', 'cerrada'].includes(i.estado)).length;
-      const resueltas = statsRes.data.filter((i) => i.estado === 'resuelta').length;
-      setStats({ abiertas, resueltas, vecinos: 0 });
+    const incs = incSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Incidencia));
+    const anuncs = anuncSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Anuncio));
+    const allIncs = allIncSnap.docs.map((d) => d.data());
+
+    // Fetch autor names for incidencias
+    for (const inc of incs) {
+      if (inc.autor_id) {
+        const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
+        if (autorSnap.exists()) inc.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+      }
+      if (inc.categoria_id) {
+        const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(inc.categoria_id)));
+        if (catSnap.exists()) inc.categoria = { id: catSnap.id, ...catSnap.data() } as any;
+      }
     }
+
+    setIncidencias(incs);
+    setAnuncios(anuncs);
+
+    const abiertas = allIncs.filter((i: any) => !['resuelta', 'cerrada'].includes(i.estado)).length;
+    const resueltas = allIncs.filter((i: any) => i.estado === 'resuelta').length;
+    setStats({ abiertas, resueltas, vecinos: 0 });
     setLoading(false);
   }
 
   async function copiarCodigo() {
-    const { data } = await supabase
-      .from('comunidades')
-      .select('codigo')
-      .eq('id', comunidadId!)
-      .single();
-    if (data?.codigo) {
-      navigator.clipboard.writeText(data.codigo);
-      toast.success(`Código copiado: ${data.codigo}`);
+    if (!comunidadId) return;
+    const comunidadSnap = await getDoc(doc(db, 'comunidades', comunidadId));
+    if (comunidadSnap.exists()) {
+      const codigo = comunidadSnap.data().codigo;
+      navigator.clipboard.writeText(codigo);
+      toast.success(`Código copiado: ${codigo}`);
     }
   }
 
@@ -141,10 +141,7 @@ export default function InicioPage() {
       </div>
 
       <div>
-        <Button
-          className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20"
-          asChild
-        >
+        <Button className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-12 text-base font-medium shadow-md shadow-finca-coral/20" asChild>
           <Link href="/nueva">
             <Plus className="w-5 h-5 mr-2" />
             Reportar incidencia
@@ -224,12 +221,7 @@ export default function InicioPage() {
             <p className="font-medium text-sm text-finca-dark">Invita a tus vecinos</p>
             <p className="text-xs text-muted-foreground">Comparte el código de acceso</p>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white"
-            onClick={copiarCodigo}
-          >
+          <Button size="sm" variant="outline" className="border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white" onClick={copiarCodigo}>
             <Copy className="w-3.5 h-3.5 mr-1.5" />
             Código
           </Button>

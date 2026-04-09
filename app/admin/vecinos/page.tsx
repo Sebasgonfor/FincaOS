@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -30,22 +31,24 @@ export default function AdminVecinosPage() {
   }, [perfil?.comunidad_id]);
 
   async function fetchVecinos() {
-    const { data } = await supabase
-      .from('perfiles')
-      .select('*')
-      .eq('comunidad_id', perfil!.comunidad_id!)
-      .order('nombre_completo');
-    setVecinos((data as Perfil[]) || []);
+    const q = query(
+      collection(db, 'perfiles'),
+      where('comunidad_id', '==', perfil!.comunidad_id!),
+      orderBy('nombre_completo')
+    );
+    const snap = await getDocs(q);
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Perfil);
+    setVecinos(list);
     setLoading(false);
   }
 
   async function cambiarRol(id: string, nuevoRol: string) {
-    const { error } = await supabase.from('perfiles').update({ rol: nuevoRol }).eq('id', id);
-    if (error) {
-      toast.error('Error al actualizar el rol');
-    } else {
+    try {
+      await updateDoc(doc(db, 'perfiles', id), { rol: nuevoRol });
       toast.success('Rol actualizado');
       fetchVecinos();
+    } catch {
+      toast.error('Error al actualizar el rol');
     }
   }
 

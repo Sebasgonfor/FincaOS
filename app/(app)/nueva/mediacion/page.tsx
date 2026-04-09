@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Scale, Bot, UserCheck, FileText, ChevronRight, CircleCheck as CheckCircle2, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -50,46 +51,44 @@ export default function MediacionPage() {
     setEnviando(true);
     setFase('procesando');
 
-    const { data, error } = await supabase.from('mediaciones').insert({
-      comunidad_id: perfil.comunidad_id,
-      denunciante_id: perfil.id,
-      tipo,
-      descripcion: descripcion.trim(),
-      es_recurrente: esRecurrente,
-      es_anonimo: esAnonimo,
-      estado: 'ia_procesando',
-    }).select('id').single();
+    try {
+      const ref = await addDoc(collection(db, 'mediaciones'), {
+        comunidad_id: perfil.comunidad_id,
+        denunciante_id: perfil.id,
+        tipo,
+        descripcion: descripcion.trim(),
+        es_recurrente: esRecurrente,
+        es_anonimo: esAnonimo,
+        estado: 'ia_procesando',
+        created_at: new Date().toISOString(),
+      });
 
-    if (error || !data) {
+      setMediacionId(ref.id);
+      await new Promise((r) => setTimeout(r, 2000));
+
+      await updateDoc(doc(db, 'mediaciones', ref.id), {
+        estado: 'ia_propuesta',
+        propuesta_ia: PROPUESTAS_IA[tipo] || PROPUESTAS_IA.otro,
+      });
+
+      setFase('propuesta');
+    } catch {
       toast.error('Error al iniciar la mediación');
       setFase('formulario');
-      setEnviando(false);
-      return;
     }
-
-    setMediacionId(data.id);
-
-    await new Promise((r) => setTimeout(r, 2000));
-
-    await supabase.from('mediaciones').update({
-      estado: 'ia_propuesta',
-      propuesta_ia: PROPUESTAS_IA[tipo] || PROPUESTAS_IA.otro,
-    }).eq('id', data.id);
-
-    setFase('propuesta');
     setEnviando(false);
   }
 
   async function solicitarMediadorHumano() {
     if (mediacionId) {
-      await supabase.from('mediaciones').update({ estado: 'mediador_requerido' }).eq('id', mediacionId);
+      await updateDoc(doc(db, 'mediaciones', mediacionId), { estado: 'mediador_requerido' });
     }
     setFase('mediador');
   }
 
   async function marcarResuelto() {
     if (mediacionId) {
-      await supabase.from('mediaciones').update({ estado: 'resuelto' }).eq('id', mediacionId);
+      await updateDoc(doc(db, 'mediaciones', mediacionId), { estado: 'resuelto' });
     }
     setFase('resuelto');
   }

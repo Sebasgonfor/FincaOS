@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { LogOut, User, Building2, Bell, Shield, ChevronRight, Copy, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { doc, getDoc } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,10 +33,11 @@ export default function PerfilPage() {
 
   async function copiarCodigo() {
     if (!perfil?.comunidad_id) return;
-    const { data } = await supabase.from('comunidades').select('codigo').eq('id', perfil.comunidad_id).single();
-    if (data?.codigo) {
-      navigator.clipboard.writeText(data.codigo);
-      toast.success(`Código copiado: ${data.codigo}`);
+    const snap = await getDoc(doc(db, 'comunidades', perfil.comunidad_id));
+    const codigo = snap.data()?.codigo;
+    if (codigo) {
+      navigator.clipboard.writeText(codigo);
+      toast.success(`Código copiado: ${codigo}`);
     }
   }
 

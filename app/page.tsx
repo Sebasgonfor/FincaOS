@@ -2,19 +2,21 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/lib/firebase/client';
 
 export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
         router.replace('/inicio');
       } else {
         router.replace('/login');
       }
     });
+    return () => unsubscribe();
   }, [router]);
 
   return (

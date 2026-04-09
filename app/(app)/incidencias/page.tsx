@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Search, Filter, CircleAlert as AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, getDoc, doc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -51,13 +52,39 @@ export default function IncidenciasPage() {
   }, [perfil?.comunidad_id]);
 
   async function fetchIncidencias() {
-    const { data } = await supabase
-      .from('incidencias')
-      .select('*, autor:perfiles(nombre_completo, numero_piso), categoria:categorias_incidencia(nombre, icono)')
-      .eq('comunidad_id', perfil!.comunidad_id!)
-      .order('created_at', { ascending: false });
+    const q = query(
+      collection(db, 'incidencias'),
+      where('comunidad_id', '==', perfil!.comunidad_id!),
+      orderBy('created_at', 'desc')
+    );
+    const snap = await getDocs(q);
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    setIncidencias((data as Incidencia[]) || []);
+    const enriched = await Promise.all(
+      items.map(async (inc: any) => {
+        let autor = null;
+        if (inc.autor_id) {
+          const autorSnap = await getDoc(doc(db, 'perfiles', inc.autor_id));
+          if (autorSnap.exists()) {
+            const data = autorSnap.data();
+            autor = { nombre_completo: data.nombre_completo, numero_piso: data.numero_piso };
+          }
+        }
+
+        let categoria = null;
+        if (inc.categoria_id) {
+          const catSnap = await getDoc(doc(db, 'categorias_incidencia', inc.categoria_id));
+          if (catSnap.exists()) {
+            const data = catSnap.data();
+            categoria = { nombre: data.nombre, icono: data.icono };
+          }
+        }
+
+        return { ...inc, autor, categoria } as Incidencia;
+      })
+    );
+
+    setIncidencias(enriched);
     setLoading(false);
   }
 

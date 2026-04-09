@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CircleCheck as CheckCircle2, Pin } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,17 +31,21 @@ export default function NuevoAnuncioPage() {
     if (!perfil?.comunidad_id) { toast.error('No perteneces a ninguna comunidad'); return; }
     setLoading(true);
 
-    const { error } = await supabase.from('anuncios').insert({
-      comunidad_id: perfil.comunidad_id,
-      autor_id: perfil.id,
-      titulo: titulo.trim(),
-      contenido: contenido.trim(),
-      fijado,
-    });
+    try {
+      await addDoc(collection(db, 'anuncios'), {
+        comunidad_id: perfil.comunidad_id,
+        autor_id: perfil.id,
+        titulo: titulo.trim(),
+        contenido: contenido.trim(),
+        fijado,
+        publicado_at: new Date().toISOString(),
+      });
+      setEnviado(true);
+    } catch {
+      toast.error('Error al publicar el anuncio');
+    }
 
     setLoading(false);
-    if (error) { toast.error('Error al publicar el anuncio'); }
-    else { setEnviado(true); }
   }
 
   if (!esAdmin) {

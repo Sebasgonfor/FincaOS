@@ -5,7 +5,8 @@ import { Search, Wallet, CircleCheck as CheckCircle2, CircleAlert as AlertCircle
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, addDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -59,44 +60,88 @@ export default function AdminCobrosPage() {
 
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
-    const [cuotaRes, vecRes] = await Promise.all([
-      supabase.from('cuotas_vecinos').select('*, vecino:perfiles(nombre_completo, numero_piso)').eq('comunidad_id', cid).order('mes_anio', { ascending: false }),
-      supabase.from('perfiles').select('*').eq('comunidad_id', cid).order('nombre_completo'),
-    ]);
-    setCuotas((cuotaRes.data as CuotaConVecino[]) || []);
-    setVecinos((vecRes.data as Perfil[]) || []);
+
+    // Fetch cuotas
+    const cuotaQuery = query(
+      collection(db, 'cuotas_vecinos'),
+      where('comunidad_id', '==', cid),
+      orderBy('mes_anio', 'desc')
+    );
+    const cuotaSnap = await getDocs(cuotaQuery);
+    const cuotaList: CuotaConVecino[] = [];
+    for (const d of cuotaSnap.docs) {
+      const data = { id: d.id, ...d.data() } as CuotaConVecino;
+      // Fetch vecino profile
+      if (data.vecino_id) {
+        const vecinoSnap = await getDoc(doc(db, 'perfiles', data.vecino_id));
+        if (vecinoSnap.exists()) {
+          const vData = vecinoSnap.data();
+          data.vecino = { nombre_completo: vData.nombre_completo, numero_piso: vData.numero_piso };
+        }
+      }
+      cuotaList.push(data);
+    }
+
+    // Fetch perfiles for dropdown
+    const vecQuery = query(
+      collection(db, 'perfiles'),
+      where('comunidad_id', '==', cid),
+      orderBy('nombre_completo')
+    );
+    const vecSnap = await getDocs(vecQuery);
+    const vecList = vecSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Perfil);
+
+    setCuotas(cuotaList);
+    setVecinos(vecList);
     setLoading(false);
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
-    const { error } = await supabase.from('cuotas_vecinos').update({
-      estado: nuevoEstado,
-      ...(nuevoEstado === 'al_dia' ? { pagado_at: new Date().toISOString() } : { pagado_at: null }),
-    }).eq('id', id);
-    if (error) { toast.error('Error al actualizar'); }
-    else { toast.success('Estado actualizado'); fetchData(); }
+    try {
+      await updateDoc(doc(db, 'cuotas_vecinos', id), {
+        estado: nuevoEstado,
+        ...(nuevoEstado === 'al_dia' ? { pagado_at: new Date().toISOString() } : { pagado_at: null }),
+      });
+      toast.success('Estado actualizado');
+      fetchData();
+    } catch {
+      toast.error('Error al actualizar');
+    }
   }
 
   async function crearCuota(e: React.FormEvent) {
     e.preventDefault();
     if (!nuevaVecinoId || !perfil?.comunidad_id) return;
     setEnviando(true);
-    const { error } = await supabase.from('cuotas_vecinos').insert({
-      comunidad_id: perfil.comunidad_id,
-      vecino_id: nuevaVecinoId,
-      mes_anio: nuevaMes,
-      importe: parseFloat(nuevaImporte),
-      estado: nuevaEstado,
-      ...(nuevaEstado === 'al_dia' ? { pagado_at: new Date().toISOString() } : {}),
-    });
-    if (error?.code === '23505') {
+
+    // Check for duplicate (replaces Supabase 23505 unique constraint error)
+    const dupQuery = query(
+      collection(db, 'cuotas_vecinos'),
+      where('comunidad_id', '==', perfil.comunidad_id),
+      where('vecino_id', '==', nuevaVecinoId),
+      where('mes_anio', '==', nuevaMes)
+    );
+    const dupSnap = await getDocs(dupQuery);
+    if (!dupSnap.empty) {
       toast.error('Ya existe una cuota para ese vecino y mes');
-    } else if (error) {
-      toast.error('Error al crear la cuota');
-    } else {
+      setEnviando(false);
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'cuotas_vecinos'), {
+        comunidad_id: perfil.comunidad_id,
+        vecino_id: nuevaVecinoId,
+        mes_anio: nuevaMes,
+        importe: parseFloat(nuevaImporte),
+        estado: nuevaEstado,
+        ...(nuevaEstado === 'al_dia' ? { pagado_at: new Date().toISOString() } : {}),
+      });
       toast.success('Cuota registrada');
       setDialogOpen(false);
       fetchData();
+    } catch {
+      toast.error('Error al crear la cuota');
     }
     setEnviando(false);
   }

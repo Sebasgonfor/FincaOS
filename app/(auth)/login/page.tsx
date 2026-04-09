@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,13 +26,13 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      toast.error('Credenciales incorrectas. Inténtalo de nuevo.');
-    } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
       router.replace('/inicio');
+    } catch {
+      toast.error('Credenciales incorrectas. Inténtalo de nuevo.');
     }
+    setLoading(false);
   }
 
   return (

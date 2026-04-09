@@ -3,7 +3,18 @@
 import { useEffect, useState } from 'react';
 import { FileText, Users, Megaphone, Building2, Copy, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  getDoc,
+  addDoc,
+  doc as firestoreDoc,
+} from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Perfil, Anuncio, Documento, Comunidad } from '@/types/database';
 import { Card, CardContent } from '@/components/ui/card';
@@ -51,40 +62,139 @@ export default function ComunidadPage() {
 
   async function fetchData() {
     const cid = perfil!.comunidad_id!;
-    const [comRes, vecRes, anuncRes, docRes, votRes, cuotaRes] = await Promise.all([
-      supabase.from('comunidades').select('*').eq('id', cid).single(),
-      supabase.from('perfiles').select('*').eq('comunidad_id', cid).order('nombre_completo'),
-      supabase.from('anuncios').select('*, autor:perfiles(nombre_completo)').eq('comunidad_id', cid).order('fijado', { ascending: false }).order('publicado_at', { ascending: false }),
-      supabase.from('documentos').select('*').eq('comunidad_id', cid).order('created_at', { ascending: false }),
-      supabase.from('votaciones').select('*, opciones:opciones_votacion(*), respuestas:respuestas_votacion(opcion_id, vecino_id)').eq('comunidad_id', cid).order('created_at', { ascending: false }),
-      supabase.from('cuotas_vecinos').select('*').eq('vecino_id', perfil!.id).order('mes_anio', { ascending: false }).limit(6),
-    ]);
 
-    if (comRes.data) setComunidad(comRes.data as Comunidad);
-    if (vecRes.data) setVecinos(vecRes.data as Perfil[]);
-    if (anuncRes.data) setAnuncios(anuncRes.data as Anuncio[]);
-    if (docRes.data) setDocumentos(docRes.data as Documento[]);
-    if (votRes.data) setVotaciones(votRes.data as Votacion[]);
-    if (cuotaRes.data) setCuotas(cuotaRes.data as Cuota[]);
+    // 1. Fetch comunidad by document id
+    const comSnap = await getDoc(firestoreDoc(db, 'comunidades', cid));
+    if (comSnap.exists()) {
+      setComunidad({ id: comSnap.id, ...comSnap.data() } as Comunidad);
+    }
+
+    // 2. Fetch vecinos
+    const vecSnap = await getDocs(
+      query(
+        collection(db, 'perfiles'),
+        where('comunidad_id', '==', cid),
+        orderBy('nombre_completo')
+      )
+    );
+    setVecinos(vecSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Perfil)));
+
+    // 3. Fetch anuncios, then resolve autor names
+    const anuncSnap = await getDocs(
+      query(
+        collection(db, 'anuncios'),
+        where('comunidad_id', '==', cid),
+        orderBy('fijado', 'desc'),
+        orderBy('publicado_at', 'desc')
+      )
+    );
+    const anunciosRaw = anuncSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Collect unique autor_id values and batch-fetch their profiles
+    const autorIds = Array.from(new Set(anunciosRaw.map((a: any) => a.autor_id).filter(Boolean))) as string[];
+    const autorMap: Record<string, string> = {};
+    await Promise.all(
+      autorIds.map(async (autorId) => {
+        const autorSnap = await getDoc(firestoreDoc(db, 'perfiles', autorId));
+        if (autorSnap.exists()) {
+          autorMap[autorId] = (autorSnap.data() as any).nombre_completo;
+        }
+      })
+    );
+    const anunciosConAutor = anunciosRaw.map((a: any) => ({
+      ...a,
+      autor: a.autor_id ? { nombre_completo: autorMap[a.autor_id] || '' } : null,
+    }));
+    setAnuncios(anunciosConAutor as Anuncio[]);
+
+    // 4. Fetch documentos
+    const docSnap = await getDocs(
+      query(
+        collection(db, 'documentos'),
+        where('comunidad_id', '==', cid),
+        orderBy('created_at', 'desc')
+      )
+    );
+    setDocumentos(docSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Documento)));
+
+    // 5. Fetch votaciones, then for each fetch opciones and respuestas
+    const votSnap = await getDocs(
+      query(
+        collection(db, 'votaciones'),
+        where('comunidad_id', '==', cid),
+        orderBy('created_at', 'desc')
+      )
+    );
+    const votacionesRaw = votSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const votacionesCompletas: Votacion[] = await Promise.all(
+      votacionesRaw.map(async (v: any) => {
+        const [opcionesSnap, respuestasSnap] = await Promise.all([
+          getDocs(
+            query(
+              collection(db, 'opciones_votacion'),
+              where('votacion_id', '==', v.id)
+            )
+          ),
+          getDocs(
+            query(
+              collection(db, 'respuestas_votacion'),
+              where('votacion_id', '==', v.id)
+            )
+          ),
+        ]);
+        return {
+          ...v,
+          opciones: opcionesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          respuestas: respuestasSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+        } as Votacion;
+      })
+    );
+    setVotaciones(votacionesCompletas);
+
+    // 6. Fetch cuotas for this vecino
+    const cuotaSnap = await getDocs(
+      query(
+        collection(db, 'cuotas_vecinos'),
+        where('vecino_id', '==', perfil!.id),
+        orderBy('mes_anio', 'desc'),
+        limit(6)
+      )
+    );
+    setCuotas(cuotaSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Cuota)));
+
     setLoading(false);
   }
 
   async function votar(votacionId: string, opcionId: string) {
     if (!perfil) return;
     setVotando(votacionId);
-    const { error } = await supabase.from('respuestas_votacion').insert({
-      votacion_id: votacionId,
-      opcion_id: opcionId,
-      vecino_id: perfil.id,
-    });
-    if (error?.code === '23505') {
-      toast.error('Ya has votado en esta votación');
-    } else if (error) {
+
+    try {
+      // Check for duplicate vote since Firestore has no unique constraints
+      const existingSnap = await getDocs(
+        query(
+          collection(db, 'respuestas_votacion'),
+          where('votacion_id', '==', votacionId),
+          where('vecino_id', '==', perfil.id)
+        )
+      );
+
+      if (!existingSnap.empty) {
+        toast.error('Ya has votado en esta votación');
+      } else {
+        await addDoc(collection(db, 'respuestas_votacion'), {
+          votacion_id: votacionId,
+          opcion_id: opcionId,
+          vecino_id: perfil.id,
+        });
+        toast.success('Voto registrado correctamente');
+        fetchData();
+      }
+    } catch (error) {
       toast.error('Error al registrar tu voto');
-    } else {
-      toast.success('Voto registrado correctamente');
-      fetchData();
     }
+
     setVotando(null);
   }
 

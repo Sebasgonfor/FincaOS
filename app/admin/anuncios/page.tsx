@@ -5,7 +5,8 @@ import { Plus, Pin, Trash2, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Anuncio } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -33,13 +34,26 @@ export default function AdminAnunciosPage() {
   }, [perfil?.comunidad_id]);
 
   async function fetchAnuncios() {
-    const { data } = await supabase
-      .from('anuncios')
-      .select('*, autor:perfiles(nombre_completo)')
-      .eq('comunidad_id', perfil!.comunidad_id!)
-      .order('fijado', { ascending: false })
-      .order('publicado_at', { ascending: false });
-    setAnuncios((data as Anuncio[]) || []);
+    const q = query(
+      collection(db, 'anuncios'),
+      where('comunidad_id', '==', perfil!.comunidad_id!),
+      orderBy('fijado', 'desc'),
+      orderBy('publicado_at', 'desc')
+    );
+    const snap = await getDocs(q);
+    const list: Anuncio[] = [];
+    for (const d of snap.docs) {
+      const data = { id: d.id, ...d.data() } as Anuncio;
+      // Fetch autor
+      if (data.autor_id) {
+        const autorSnap = await getDoc(doc(db, 'perfiles', data.autor_id));
+        if (autorSnap.exists()) {
+          data.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+        }
+      }
+      list.push(data);
+    }
+    setAnuncios(list);
     setLoading(false);
   }
 
@@ -48,34 +62,34 @@ export default function AdminAnunciosPage() {
     if (!titulo.trim() || !contenido.trim()) return;
     setEnviando(true);
 
-    const { error } = await supabase.from('anuncios').insert({
-      comunidad_id: perfil!.comunidad_id!,
-      autor_id: perfil!.id,
-      titulo: titulo.trim(),
-      contenido: contenido.trim(),
-      fijado,
-    });
-
-    if (error) {
-      toast.error('Error al publicar el anuncio');
-    } else {
+    try {
+      await addDoc(collection(db, 'anuncios'), {
+        comunidad_id: perfil!.comunidad_id!,
+        autor_id: perfil!.id,
+        titulo: titulo.trim(),
+        contenido: contenido.trim(),
+        fijado,
+        publicado_at: new Date().toISOString(),
+      });
       toast.success('Anuncio publicado');
       setTitulo('');
       setContenido('');
       setFijado(false);
       setDialogOpen(false);
       fetchAnuncios();
+    } catch {
+      toast.error('Error al publicar el anuncio');
     }
     setEnviando(false);
   }
 
   async function eliminar(id: string) {
-    const { error } = await supabase.from('anuncios').delete().eq('id', id);
-    if (error) {
-      toast.error('Error al eliminar');
-    } else {
+    try {
+      await deleteDoc(doc(db, 'anuncios', id));
       toast.success('Anuncio eliminado');
       fetchAnuncios();
+    } catch {
+      toast.error('Error al eliminar');
     }
   }
 

@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, ThumbsUp, ThumbsDown, Bot, BookOpen } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,13 +76,14 @@ export default function NormativaPage() {
 
     let insertId: string | undefined;
     if (perfil?.comunidad_id) {
-      const { data } = await supabase.from('consultas_normativas').insert({
+      const ref = await addDoc(collection(db, 'consultas_normativas'), {
         comunidad_id: perfil.comunidad_id,
         vecino_id: perfil.id,
         pregunta: p,
         respuesta,
-      }).select('id').single();
-      insertId = data?.id;
+        created_at: new Date().toISOString(),
+      });
+      insertId = ref.id;
     }
 
     setConsultas((prev) =>
@@ -92,7 +94,7 @@ export default function NormativaPage() {
 
   async function valorar(id: string | undefined, util: boolean) {
     if (!id) return;
-    await supabase.from('consultas_normativas').update({ util }).eq('id', id);
+    await updateDoc(doc(db, 'consultas_normativas', id), { util });
     setConsultas((prev) => prev.map((c) => c.id === id ? { ...c, util } : c));
   }
 

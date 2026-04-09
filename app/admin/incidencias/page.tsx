@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Search, CircleAlert as AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { db } from '@/lib/firebase/client';
+import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
 import { Input } from '@/components/ui/input';
@@ -40,31 +41,46 @@ export default function AdminIncidenciasPage() {
   }, [perfil?.comunidad_id]);
 
   async function fetchIncidencias() {
-    const { data } = await supabase
-      .from('incidencias')
-      .select('*, autor:perfiles(nombre_completo, numero_piso), categoria:categorias_incidencia(nombre)')
-      .eq('comunidad_id', perfil!.comunidad_id!)
-      .order('created_at', { ascending: false });
-
-    setIncidencias((data as Incidencia[]) || []);
+    const incQuery = query(
+      collection(db, 'incidencias'),
+      where('comunidad_id', '==', perfil!.comunidad_id!),
+      orderBy('created_at', 'desc')
+    );
+    const incSnap = await getDocs(incQuery);
+    const incList: Incidencia[] = [];
+    for (const d of incSnap.docs) {
+      const data = { id: d.id, ...d.data() } as Incidencia;
+      // Fetch autor
+      if (data.autor_id) {
+        const autorSnap = await getDoc(doc(db, 'perfiles', data.autor_id));
+        if (autorSnap.exists()) {
+          data.autor = { id: autorSnap.id, ...autorSnap.data() } as any;
+        }
+      }
+      // Fetch categoria
+      if (data.categoria_id) {
+        const catSnap = await getDoc(doc(db, 'categorias_incidencia', String(data.categoria_id)));
+        if (catSnap.exists()) {
+          data.categoria = { id: catSnap.id, ...catSnap.data() } as any;
+        }
+      }
+      incList.push(data);
+    }
+    setIncidencias(incList);
     setLoading(false);
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
     setActualizando(id);
-    const { error } = await supabase
-      .from('incidencias')
-      .update({
+    try {
+      await updateDoc(doc(db, 'incidencias', id), {
         estado: nuevoEstado,
         ...(nuevoEstado === 'resuelta' ? { resuelta_at: new Date().toISOString() } : {}),
-      })
-      .eq('id', id);
-
-    if (error) {
-      toast.error('Error al actualizar el estado');
-    } else {
+      });
       toast.success('Estado actualizado');
       fetchIncidencias();
+    } catch {
+      toast.error('Error al actualizar el estado');
     }
     setActualizando(null);
   }
