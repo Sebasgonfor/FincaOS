@@ -57,9 +57,11 @@ export default function LoginPage() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
+        router.replace('/onboarding');
+      } else {
+        const data = perfilSnap.data();
+        router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
       }
-
-      router.replace('/inicio');
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         toast.error('Error al iniciar sesión con Google');

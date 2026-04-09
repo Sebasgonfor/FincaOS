@@ -1,20 +1,28 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { BottomTabBar } from '@/components/layout/BottomTabBar';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, perfil, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
     }
   }, [user, loading, router]);
+
+  // Redirect to onboarding if user has no community (except if already on onboarding)
+  useEffect(() => {
+    if (!loading && user && perfil && !perfil.comunidad_id && pathname !== '/onboarding') {
+      router.replace('/onboarding');
+    }
+  }, [user, perfil, loading, pathname, router]);
 
   if (loading) {
     return (
@@ -25,6 +33,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
+
+  // On onboarding page, show simplified layout
+  if (pathname === '/onboarding') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-finca-peach/30 via-background to-background flex flex-col">
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
