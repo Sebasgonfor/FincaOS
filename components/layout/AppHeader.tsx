@@ -1,12 +1,33 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Bell } from 'lucide-react';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 export function AppHeader() {
   const { perfil } = useAuth();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!perfil?.id) return;
+
+    const q = query(
+      collection(db, 'notificaciones'),
+      where('usuario_id', '==', perfil.id),
+      where('leida', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setUnread(snap.size);
+    });
+
+    return () => unsubscribe();
+  }, [perfil?.id]);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-border safe-top">
@@ -25,10 +46,16 @@ export function AppHeader() {
               {(perfil.comunidad as any).nombre}
             </span>
           )}
-          <Button variant="ghost" size="icon" className="relative w-9 h-9">
-            <Bell className="w-5 h-5 text-finca-dark" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-finca-coral rounded-full" />
-          </Button>
+          <Link href="/notificaciones">
+            <Button variant="ghost" size="icon" className="relative w-9 h-9">
+              <Bell className="w-5 h-5 text-finca-dark" />
+              {unread > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-finca-coral text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </Button>
+          </Link>
         </div>
       </div>
     </header>

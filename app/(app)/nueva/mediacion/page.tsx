@@ -23,15 +23,6 @@ const tipos = [
   { value: 'otro', label: 'Otro', emoji: '📦' },
 ];
 
-const PROPUESTAS_IA: Record<string, string> = {
-  ruido: 'Según el art. 7.2 de la LPH y la normativa municipal, el horario de descanso es de 22:00h a 8:00h en días laborables y de 23:00h a 9:00h en festivos.\n\nPropuesta: Enviar comunicación formal al vecino afectado recordando la normativa de convivencia. La comunicación puede realizarse de forma anónima.',
-  parking: 'El art. 9.1.a de la LPH establece que cada propietario debe usar sus elementos privativos respetando la comunidad. El uso indebido de plazas de garaje puede ser objeto de acción legal.\n\nPropuesta: Notificación formal indicando la normativa aplicable y solicitando el cese de la conducta en 48h.',
-  mascotas: 'Según los estatutos tipo de comunidades y el art. 7.2 LPH, las mascotas no deben causar molestias a los vecinos. Las comunidades pueden regular su acceso a zonas comunes.\n\nPropuesta: Comunicación recordando las obligaciones de los propietarios de mascotas según los estatutos de la comunidad.',
-  obras: 'El art. 7.1 LPH requiere comunicación previa al administrador para obras en elementos privativos. Las obras en zonas comunes requieren acuerdo de junta.\n\nPropuesta: Solicitar al vecino que presente la documentación de la obra y los permisos municipales correspondientes.',
-  filtraciones: 'Según el art. 10.1 LPH, la comunidad está obligada a realizar las obras necesarias para conservar el inmueble en condiciones de habitabilidad. Las filtraciones de zonas comunes son responsabilidad de la comunidad.\n\nPropuesta: Apertura de incidencia urgente. Se recomienda peritaje para determinar el origen y responsabilidad.',
-  otro: 'Según la Ley de Propiedad Horizontal (Ley 49/1960), todos los propietarios tienen el derecho a exigir el cumplimiento de las obligaciones de convivencia.\n\nPropuesta: Se recomienda intentar una resolución amistosa mediante comunicación formal documentada a través de FincaOS.',
-};
-
 type Fase = 'formulario' | 'procesando' | 'propuesta' | 'mediador' | 'resuelto';
 
 export default function MediacionPage() {
@@ -44,6 +35,7 @@ export default function MediacionPage() {
   const [esAnonimo, setEsAnonimo] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [mediacionId, setMediacionId] = useState<string | null>(null);
+  const [propuestaIA, setPropuestaIA] = useState('');
 
   async function iniciarMediacion(e: React.FormEvent) {
     e.preventDefault();
@@ -65,11 +57,18 @@ export default function MediacionPage() {
       });
 
       setMediacionId(ref.id);
-      await new Promise((r) => setTimeout(r, 2000));
+
+      const res = await fetch('/api/ai/mediate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo, descripcion: descripcion.trim(), es_recurrente: esRecurrente }),
+      });
+      const data = await res.json();
+      setPropuestaIA(data.propuesta);
 
       await updateDoc(doc(db, 'mediaciones', ref.id), {
         estado: 'ia_propuesta',
-        propuesta_ia: PROPUESTAS_IA[tipo] || PROPUESTAS_IA.otro,
+        propuesta_ia: data.propuesta,
       });
 
       setFase('propuesta');
@@ -193,7 +192,7 @@ export default function MediacionPage() {
           <Card className="border-finca-coral/30 bg-finca-peach/10">
             <CardContent className="p-4">
               <p className="text-sm text-finca-dark leading-relaxed whitespace-pre-line">
-                {PROPUESTAS_IA[tipo] || PROPUESTAS_IA.otro}
+                {propuestaIA}
               </p>
             </CardContent>
           </Card>

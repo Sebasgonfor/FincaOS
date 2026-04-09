@@ -108,6 +108,13 @@ service cloud.firestore {
       allow update: if isAuth();
     }
 
+    // Notificaciones
+    match /notificaciones/{notifId} {
+      allow read: if isAuth() && request.auth.uid == resource.data.usuario_id;
+      allow create: if isAuth();
+      allow update: if isAuth() && request.auth.uid == resource.data.usuario_id;
+    }
+
     // Consultas normativas
     match /consultas_normativas/{consultaId} {
       allow read: if isAuth();

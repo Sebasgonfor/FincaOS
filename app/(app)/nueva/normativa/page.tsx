@@ -17,30 +17,6 @@ interface Consulta {
   util?: boolean | null;
 }
 
-const RESPUESTAS_PREDEFINIDAS: Record<string, string> = {
-  terraza: 'Según el art. 7.1 de la LPH, las obras que modifiquen la configuración o estado exterior del edificio —como el cerramiento de terrazas— requieren autorización de la Junta de Propietarios con mayoría de 3/5 del total de propietarios y cuotas.\n\nAdemás, es necesario obtener licencia municipal de obras. Consulta con tu administrador para iniciar el proceso de solicitud a la Junta.',
-  ascensor: 'El art. 10.1.b de la LPH establece que la instalación del ascensor es una obra de accesibilidad que puede ser exigida aunque el título constitutivo no lo prevea, bastando el voto favorable de la mayoría simple si el importe no supera 12 mensualidades ordinarias de gastos comunes.',
-  mascota: 'La LPH no prohíbe expresamente las mascotas en comunidades. Sin embargo, los estatutos de la comunidad pueden limitarlas. Los animales no deben causar molestias (art. 7.2 LPH). Consulta los estatutos de tu comunidad para ver si hay regulación específica.',
-  ruido: 'El art. 7.2 de la LPH prohíbe actividades molestas, insalubres, nocivas, peligrosas o ilícitas. El horario de descanso según normativa municipal suele ser 22:00-8:00h laborables y 23:00-9:00h festivos, aunque varía por municipio.',
-  derrama: 'Las derramas deben ser aprobadas en Junta de Propietarios (art. 9.1.e LPH). Para obras extraordinarias necesitan mayoría simple. Las cantidades se distribuyen según cuota de participación salvo acuerdo diferente. Los morosos pueden ser demandados judicialmente.',
-  junta: 'La Junta Ordinaria debe celebrarse al menos una vez al año para aprobar cuentas y presupuesto (art. 16 LPH). Puede ser convocada por el presidente o por propietarios que representen el 25% de cuotas. El plazo de convocatoria es de al menos 6 días naturales.',
-  morosidad: 'El propietario moroso pierde el derecho a voto en Juntas (art. 15.2 LPH) pero conserva el derecho de asistencia. La comunidad puede iniciar el proceso monitorio judicial para reclamar las cuotas impagadas con el certificado de deuda.',
-  obras: 'Para obras en elementos privativos que no afecten a zonas comunes o estructura, basta con notificar al administrador (art. 7.1 LPH). Las obras en zonas comunes requieren autorización de Junta. Las obras de mejora de accesibilidad tienen un régimen especial favorable (art. 10 LPH).',
-};
-
-function buscarRespuesta(pregunta: string): string {
-  const p = pregunta.toLowerCase();
-  if (p.includes('terraza') || p.includes('cerrar') || p.includes('cerramiento')) return RESPUESTAS_PREDEFINIDAS.terraza;
-  if (p.includes('ascensor') || p.includes('elevador')) return RESPUESTAS_PREDEFINIDAS.ascensor;
-  if (p.includes('mascota') || p.includes('perro') || p.includes('gato') || p.includes('animal')) return RESPUESTAS_PREDEFINIDAS.mascota;
-  if (p.includes('ruido') || p.includes('vecino ruidoso') || p.includes('molesta')) return RESPUESTAS_PREDEFINIDAS.ruido;
-  if (p.includes('derrama') || p.includes('derramas')) return RESPUESTAS_PREDEFINIDAS.derrama;
-  if (p.includes('junta') || p.includes('reunión') || p.includes('asamblea')) return RESPUESTAS_PREDEFINIDAS.junta;
-  if (p.includes('moros') || p.includes('impago') || p.includes('cuota') || p.includes('deuda')) return RESPUESTAS_PREDEFINIDAS.morosidad;
-  if (p.includes('obra') || p.includes('reforma') || p.includes('construir')) return RESPUESTAS_PREDEFINIDAS.obras;
-  return `Según la Ley de Propiedad Horizontal (Ley 49/1960, modificada por Ley 8/2013), todos los propietarios tienen derechos y obligaciones respecto a su comunidad.\n\nPara una respuesta precisa sobre tu consulta específica, te recomiendo:\n1. Revisar los estatutos de tu comunidad\n2. Consultar con tu administrador de fincas\n3. Si es necesario, solicitar asesoramiento legal especializado\n\n¿Puedes reformular tu pregunta con más detalle?`;
-}
-
 const preguntas_frecuentes = [
   '¿Puedo cerrar mi terraza?',
   '¿Pueden prohibir las mascotas?',
@@ -70,9 +46,13 @@ export default function NormativaPage() {
     const consulta: Consulta = { pregunta: p, respuesta: '' };
     setConsultas((prev) => [...prev, consulta]);
 
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const respuesta = buscarRespuesta(p);
+    const res = await fetch('/api/ai/normative', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pregunta: p }),
+    });
+    const data = await res.json();
+    const respuesta = data.respuesta;
 
     let insertId: string | undefined;
     if (perfil?.comunidad_id) {

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, MessageSquare, Send, MapPin, Tag, UserPlus, UserMinus, Users } from 'lucide-react';
+import { ArrowLeft, Clock, MessageSquare, Send, MapPin, Tag, UserPlus, UserMinus, Users, Star, CircleCheck as CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { db } from '@/lib/firebase/client';
-import { collection, query, where, orderBy, getDocs, getDoc, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, getDoc, addDoc, deleteDoc, updateDoc, doc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia, Comentario } from '@/types/database';
+import { notificarUsuario, notificarAdmins } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,9 @@ export default function IncidenciaDetailPage() {
   const [loading, setLoading] = useState(true);
   const [afectados, setAfectados] = useState<{ id: string; vecino_id: string }[]>([]);
   const [sumandome, setSumandome] = useState(false);
+  const [valoracion, setValoracion] = useState(0);
+  const [resolviendo, setResolviendo] = useState(false);
+  const [mostrarResolver, setMostrarResolver] = useState(false);
 
   useEffect(() => {
     fetchIncidencia();
@@ -147,12 +151,33 @@ export default function IncidenciaDetailPage() {
         created_at: new Date().toISOString(),
       });
       setNuevoComentario('');
+      // Notify incidencia author if commenter is different
+      if (incidencia && incidencia.autor_id !== perfil.id && perfil.comunidad_id) {
+        notificarUsuario(incidencia.autor_id, perfil.comunidad_id, 'comentario', 'Nuevo comentario', `${perfil.nombre_completo} comentó en "${incidencia.titulo}"`, `/incidencias/${incidencia.id}`);
+      }
       fetchIncidencia();
     } catch {
       toast.error('Error al enviar el comentario');
     }
     setEnviando(false);
   }
+
+  async function marcarResuelta() {
+    if (!perfil || !incidencia || valoracion === 0) return;
+    setResolviendo(true);
+    await updateDoc(doc(db, 'incidencias', incidencia.id), {
+      estado: 'resuelta',
+      resuelta_at: new Date().toISOString(),
+      valoracion,
+      updated_at: new Date().toISOString(),
+    });
+    toast.success('Incidencia marcada como resuelta');
+    setMostrarResolver(false);
+    fetchIncidencia();
+    setResolviendo(false);
+  }
+
+  const puedeResolver = esAutor && incidencia?.estado === 'en_ejecucion';
 
   if (loading) {
     return (
@@ -292,6 +317,70 @@ export default function IncidenciaDetailPage() {
             </Button>
           )}
         </div>
+
+        {puedeResolver && (
+          <Card className="border-0 shadow-sm bg-green-50 border-l-4 border-l-green-500">
+            <CardContent className="p-4 space-y-3">
+              {!mostrarResolver ? (
+                <Button
+                  onClick={() => setMostrarResolver(true)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white h-11"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirmar que se ha resuelto
+                </Button>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-green-800">Valora la reparación</p>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setValoracion(star)}
+                        className="p-1 transition-colors"
+                      >
+                        <Star
+                          className={cn(
+                            'w-8 h-8 transition-colors',
+                            star <= valoracion ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'
+                          )}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={marcarResuelta}
+                      disabled={valoracion === 0 || resolviendo}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {resolviendo ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Confirmar'}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setMostrarResolver(false); setValoracion(0); }}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {incidencia.estado === 'resuelta' && (incidencia as any).valoracion && (
+          <Card className="border-0 shadow-sm bg-green-50">
+            <CardContent className="p-4 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              <div>
+                <p className="text-sm font-medium text-green-800">Resuelta</p>
+                <div className="flex gap-0.5 mt-0.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star key={star} className={cn('w-4 h-4', star <= (incidencia as any).valoracion ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300')} />
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {(incidencia.estimacion_min || incidencia.estimacion_max) && (
           <Card className="border-0 shadow-sm bg-finca-peach/20 border-l-4 border-l-finca-coral">

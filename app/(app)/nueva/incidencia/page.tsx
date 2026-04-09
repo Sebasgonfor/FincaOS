@@ -8,6 +8,7 @@ import { db } from '@/lib/firebase/client';
 import { collection, getDocs, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { CategoriaIncidencia } from '@/types/database';
+import { notificarAdmins } from '@/lib/firebase/notifications';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +32,7 @@ export default function NuevaIncidenciaPage() {
   const [loading, setLoading] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [estimacion, setEstimacion] = useState<{ min: number; max: number } | null>(null);
+  const [estimando, setEstimando] = useState(false);
 
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -45,20 +47,37 @@ export default function NuevaIncidenciaPage() {
     });
   }, []);
 
-  function calcularEstimacion(catId: string | null) {
-    const cat = categorias.find((c) => c.id === catId);
-    const nombre = cat?.nombre?.toLowerCase() || '';
-    if (nombre.includes('font')) return { min: 80, max: 400 };
-    if (nombre.includes('elec')) return { min: 60, max: 350 };
-    if (nombre.includes('asc')) return { min: 500, max: 3000 };
-    if (nombre.includes('jard')) return { min: 150, max: 800 };
-    if (nombre.includes('fach')) return { min: 800, max: 5000 };
-    return { min: 100, max: 600 };
+  async function fetchEstimacion(catNombre: string, desc: string, ubi: string) {
+    setEstimando(true);
+    try {
+      const res = await fetch('/api/ai/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoria: catNombre, descripcion: desc, ubicacion: ubi }),
+      });
+      const data = await res.json();
+      setEstimacion({ min: data.min, max: data.max });
+    } catch {
+      setEstimacion({ min: 100, max: 600 });
+    } finally {
+      setEstimando(false);
+    }
   }
 
-  function handleCategoriaChange(id: string) {
+  async function handleCategoriaChange(id: string) {
     setCategoriaId(id);
-    setEstimacion(calcularEstimacion(id));
+    const cat = categorias.find((c) => c.id === id);
+    if (!cat) return;
+    setEstimacion(null);
+    await fetchEstimacion(cat.nombre, descripcion, ubicacion);
+  }
+
+  async function handleDescripcionBlur() {
+    if (!categoriaId) return;
+    const cat = categorias.find((c) => c.id === categoriaId);
+    if (!cat) return;
+    setEstimacion(null);
+    await fetchEstimacion(cat.nombre, descripcion, ubicacion);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -85,6 +104,8 @@ export default function NuevaIncidenciaPage() {
         updated_at: new Date().toISOString(),
         resuelta_at: null,
       });
+      // Notify admins
+      notificarAdmins(perfil.comunidad_id, 'incidencia', 'Nueva incidencia', `${perfil.nombre_completo} reportó: ${titulo.trim()}`, '/incidencias');
       setEnviado(true);
     } catch {
       toast.error('Error al crear la incidencia');
@@ -137,7 +158,7 @@ export default function NuevaIncidenciaPage() {
 
         <div className="space-y-2">
           <Label htmlFor="descripcion">Descripción detallada</Label>
-          <Textarea id="descripcion" placeholder="Describe el problema con más detalle..." value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={3} className="resize-none" />
+          <Textarea id="descripcion" placeholder="Describe el problema con más detalle..." value={descripcion} onChange={(e) => setDescripcion(e.target.value)} onBlur={handleDescripcionBlur} rows={3} className="resize-none" />
         </div>
 
         <div className="space-y-2">
@@ -154,14 +175,18 @@ export default function NuevaIncidenciaPage() {
           </div>
         </div>
 
-        {estimacion && (
+        {(estimacion || estimando) && (
           <Card className="bg-finca-peach/20 border-finca-peach/50">
             <CardContent className="p-3 flex items-center justify-between">
               <div>
                 <p className="text-xs text-finca-coral font-semibold uppercase tracking-wide">Estimación IA</p>
                 <p className="text-sm text-muted-foreground">Coste estimado de reparación</p>
               </div>
-              <p className="text-lg font-bold text-finca-dark">{estimacion.min}€ – {estimacion.max}€</p>
+              {estimando ? (
+                <p className="text-sm font-medium text-finca-coral animate-pulse">Estimando con IA...</p>
+              ) : (
+                estimacion && <p className="text-lg font-bold text-finca-dark">{estimacion.min}€ – {estimacion.max}€</p>
+              )}
             </CardContent>
           </Card>
         )}

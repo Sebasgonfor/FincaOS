@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase/client';
 import { collection, query, where, orderBy, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { Incidencia } from '@/types/database';
+import { notificarUsuario } from '@/lib/firebase/notifications';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,8 +77,15 @@ export default function AdminIncidenciasPage() {
     try {
       await updateDoc(doc(db, 'incidencias', id), {
         estado: nuevoEstado,
+        updated_at: new Date().toISOString(),
         ...(nuevoEstado === 'resuelta' ? { resuelta_at: new Date().toISOString() } : {}),
       });
+      // Notify incidencia author
+      const inc = incidencias.find((i) => i.id === id);
+      if (inc?.autor_id && perfil?.comunidad_id) {
+        const label = estadoConfig[nuevoEstado]?.label || nuevoEstado;
+        notificarUsuario(inc.autor_id, perfil.comunidad_id, 'estado', `Incidencia actualizada`, `"${inc.titulo}" ahora está: ${label}`, `/incidencias/${id}`);
+      }
       toast.success('Estado actualizado');
       fetchIncidencias();
     } catch {
