@@ -47,7 +47,8 @@ export default function MediacionPage() {
 
   async function iniciarMediacion(e: React.FormEvent) {
     e.preventDefault();
-    if (!descripcion.trim() || !perfil?.comunidad_id) return;
+    if (!descripcion.trim()) { toast.error('Describe el conflicto'); return; }
+    if (!perfil?.comunidad_id) { toast.error('No perteneces a ninguna comunidad'); return; }
     setEnviando(true);
     setFase('procesando');
 
@@ -72,8 +73,9 @@ export default function MediacionPage() {
       });
 
       setFase('propuesta');
-    } catch {
-      toast.error('Error al iniciar la mediación');
+    } catch (err: any) {
+      console.error('Mediacion error:', err);
+      toast.error(err?.message || 'Error al iniciar la mediación');
       setFase('formulario');
     }
     setEnviando(false);

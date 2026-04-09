@@ -9,11 +9,11 @@
       ]
     },
     {
-      "collectionGroup": "anuncios",
+      "collectionGroup": "perfiles",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "publicado_at", "order": "DESCENDING" }
+        { "fieldPath": "nombre_completo", "order": "ASCENDING" }
       ]
     },
     {
@@ -26,19 +26,19 @@
       ]
     },
     {
-      "collectionGroup": "comentarios",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "incidencia_id", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "votaciones",
+      "collectionGroup": "anuncios",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "created_at", "order": "DESCENDING" }
+        { "fieldPath": "publicado_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cuotas_vecinos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "mes_anio", "order": "DESCENDING" }
       ]
     },
     {
@@ -50,27 +50,27 @@
       ]
     },
     {
-      "collectionGroup": "cuotas_vecinos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "mes_anio", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "perfiles",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
-        { "fieldPath": "nombre_completo", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "comunidad_id", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "votaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "comunidad_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "comentarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "incidencia_id", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
       ]
     }
   ],

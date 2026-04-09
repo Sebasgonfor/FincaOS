@@ -26,22 +26,24 @@ const estadoConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function InicioPage() {
-  const { perfil, user } = useAuth();
+  const { perfil, user, loading: authLoading } = useAuth();
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
   const [stats, setStats] = useState({ abiertas: 0, resueltas: 0, vecinos: 0 });
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
   const nombreCorto = perfil?.nombre_completo?.split(' ')[0] || 'Vecino';
   const comunidadId = perfil?.comunidad_id;
+  const loading = authLoading || dataLoading;
 
   useEffect(() => {
+    if (authLoading) return;
     if (!comunidadId) {
-      setLoading(false);
+      setDataLoading(false);
       return;
     }
     fetchData();
-  }, [comunidadId]);
+  }, [comunidadId, authLoading]);
 
   async function fetchData() {
     const [incSnap, anuncSnap, allIncSnap] = await Promise.all([
@@ -72,7 +74,7 @@ export default function InicioPage() {
     const abiertas = allIncs.filter((i: any) => !['resuelta', 'cerrada'].includes(i.estado)).length;
     const resueltas = allIncs.filter((i: any) => i.estado === 'resuelta').length;
     setStats({ abiertas, resueltas, vecinos: 0 });
-    setLoading(false);
+    setDataLoading(false);
   }
 
   async function copiarCodigo() {
