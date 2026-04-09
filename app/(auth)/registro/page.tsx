@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, UserPlus, Building2 } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs, addDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, collection, query, where, getDocs, addDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,11 +44,19 @@ export default function RegistroPage() {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
+      // Find community if invite code present
+      let comunidadId: string | null = null;
+      if (codigoComunidad) {
+        const q = query(collection(db, 'comunidades'), where('codigo', '==', codigoComunidad.toUpperCase()));
+        const snap = await getDocs(q);
+        if (!snap.empty) comunidadId = snap.docs[0].id;
+      }
+
       // Check if profile already exists
       const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
       if (!perfilSnap.exists()) {
         await setDoc(doc(db, 'perfiles', user.uid), {
-          comunidad_id: null,
+          comunidad_id: comunidadId,
           nombre_completo: user.displayName || 'Sin nombre',
           numero_piso: null,
           rol: 'vecino',
@@ -57,10 +65,15 @@ export default function RegistroPage() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
-        router.replace('/onboarding');
+        router.replace(comunidadId ? '/inicio' : '/onboarding');
       } else {
         const data = perfilSnap.data();
-        router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+        if (!data?.comunidad_id && comunidadId) {
+          await updateDoc(doc(db, 'perfiles', user.uid), { comunidad_id: comunidadId, updated_at: new Date().toISOString() });
+          router.replace('/inicio');
+        } else {
+          router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+        }
       }
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -221,8 +234,19 @@ export default function RegistroPage() {
               {commonFields}
               <div className="space-y-1.5">
                 <Label htmlFor="codigo">Código de comunidad</Label>
-                <Input id="codigo" placeholder="Ej: ABC123" value={codigoComunidad} onChange={(e) => setCodigoComunidad(e.target.value)} className="uppercase" required />
-                <p className="text-xs text-muted-foreground">Pídele el código a un vecino o al administrador</p>
+                <Input
+                  id="codigo"
+                  placeholder="Ej: ABC123"
+                  value={codigoComunidad}
+                  onChange={(e) => setCodigoComunidad(e.target.value)}
+                  className="uppercase"
+                  required
+                  readOnly={!!searchParams.get('codigo')}
+                />
+                {searchParams.get('codigo')
+                  ? <p className="text-xs text-green-600">Código pre-llenado desde link de invitación</p>
+                  : <p className="text-xs text-muted-foreground">Pídele el código a un vecino o al administrador</p>
+                }
               </div>
               <Button type="submit" className="w-full bg-finca-coral hover:bg-finca-coral/90 text-white h-11" disabled={loading}>
                 {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><UserPlus className="w-4 h-4 mr-2" />Unirme</>}
