@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const rolLabel: Record<string, string> = { vecino: 'Vecino', presidente: 'Presidente', admin: 'Administrador' };
 const rolColor: Record<string, string> = {
@@ -76,7 +77,18 @@ export default function AdminVecinosPage() {
 
       {loading ? (
         <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-3 flex items-center gap-3">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <Skeleton className="h-8 w-36 rounded-md" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filtrados.length === 0 ? (
         <div className="py-16 text-center space-y-2">

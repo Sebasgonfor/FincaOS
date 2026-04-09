@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface CuotaConVecino {
   id: string;
@@ -257,7 +258,21 @@ export default function AdminCobrosPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-3 flex items-center gap-3">
+                <Skeleton className="w-9 h-9 rounded-xl" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-44" />
+                </div>
+                <Skeleton className="h-5 w-14" />
+                <Skeleton className="h-7 w-28 rounded-md" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : filtradas.length === 0 ? (
         <div className="py-12 text-center space-y-2">
           <Wallet className="w-12 h-12 text-muted-foreground/30 mx-auto" />

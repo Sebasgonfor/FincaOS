@@ -15,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const estadoConfig: Record<string, { label: string; color: string; step: number }> = {
   pendiente:    { label: 'Reportada',    color: 'bg-yellow-100 text-yellow-700 border-yellow-200', step: 1 },
@@ -154,7 +155,49 @@ export default function IncidenciaDetailPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" /></div>;
+    return (
+      <div className="pb-6">
+        <div className="px-4 py-3 flex items-center gap-3 border-b border-border">
+          <Skeleton className="w-8 h-8 rounded-lg" />
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-5 w-16 rounded-full ml-auto" />
+        </div>
+        <div className="px-4 py-4 space-y-4">
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="flex-1 h-1.5 rounded-full" />
+            ))}
+          </div>
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-44" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <div className="flex gap-2 pt-1">
+                <Skeleton className="h-7 w-24 rounded-lg" />
+                <Skeleton className="h-7 w-28 rounded-lg" />
+              </div>
+            </CardContent>
+          </Card>
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-32" />
+            {[1, 2].map((i) => (
+              <div key={i} className="flex gap-2.5">
+                <Skeleton className="w-8 h-8 rounded-full" />
+                <Skeleton className="h-16 w-3/4 rounded-2xl" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!incidencia) {

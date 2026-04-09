@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -89,8 +90,37 @@ export default function InicioPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 rounded-full border-4 border-finca-coral border-t-transparent animate-spin" />
+      <div className="px-4 py-5 space-y-6">
+        <div className="space-y-1">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-36" />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-3 text-center space-y-2">
+                <Skeleton className="w-8 h-8 rounded-lg mx-auto" />
+                <Skeleton className="h-6 w-8 mx-auto" />
+                <Skeleton className="h-3 w-14 mx-auto" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Skeleton className="h-12 w-full rounded-xl" />
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-40" />
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-3 flex items-center justify-between">
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
