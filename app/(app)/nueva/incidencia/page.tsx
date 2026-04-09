@@ -76,10 +76,14 @@ export default function NuevaIncidenciaPage() {
         titulo: titulo.trim(),
         descripcion: descripcion.trim() || null,
         categoria_id: categoriaId,
+        estado: 'pendiente',
         prioridad,
         ubicacion,
         estimacion_min: est.min,
         estimacion_max: est.max,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        resuelta_at: null,
       });
       setEnviado(true);
     } catch {

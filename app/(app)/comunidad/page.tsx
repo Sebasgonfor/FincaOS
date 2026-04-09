@@ -201,7 +201,7 @@ export default function ComunidadPage() {
 
   async function compartirLink() {
     if (!comunidad?.codigo) return;
-    const url = `${window.location.origin}/invite/${comunidad.codigo}`;
+    const url = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/invite/${comunidad.codigo}`;
     if (navigator.share) {
       navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: 'Únete a nuestra comunidad con este enlace:', url });
     } else {

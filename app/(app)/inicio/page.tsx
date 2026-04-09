@@ -83,7 +83,7 @@ export default function InicioPage() {
     const comunidadSnap = await getDoc(doc(db, 'comunidades', comunidadId));
     if (!comunidadSnap.exists()) return;
     const codigo = comunidadSnap.data().codigo;
-    const url = `${window.location.origin}/invite/${codigo}`;
+    const url = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/invite/${codigo}`;
 
     if (navigator.share) {
       navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: `Únete a nuestra comunidad con este enlace:`, url });

@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, User, Building2, Bell, Shield, ChevronRight, Copy, Share2 } from 'lucide-react';
+import { LogOut, User, Building2, Bell, Shield, ChevronRight, Copy, Share2, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase/client';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,11 @@ export default function PerfilPage() {
   const { perfil, signOut, user } = useAuth();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [comunidadNombre, setComunidadNombre] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
+  const esAdmin = perfil?.rol === 'admin' || perfil?.rol === 'presidente';
 
   const rolLabel: Record<string, string> = { vecino: 'Vecino', presidente: 'Presidente', admin: 'Administrador' };
   const rolColor: Record<string, string> = {
@@ -36,13 +42,30 @@ export default function PerfilPage() {
     const snap = await getDoc(doc(db, 'comunidades', perfil.comunidad_id));
     const codigo = snap.data()?.codigo;
     if (!codigo) return;
-    const url = `${window.location.origin}/invite/${codigo}`;
+    const url = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/invite/${codigo}`;
     if (navigator.share) {
       navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: 'Únete a nuestra comunidad con este enlace:', url });
     } else {
       navigator.clipboard.writeText(url);
       toast.success('Link de invitación copiado');
     }
+  }
+
+  function startEditingName() {
+    setComunidadNombre((perfil?.comunidad as any)?.nombre || '');
+    setEditingName(true);
+  }
+
+  async function saveNombre() {
+    if (!comunidadNombre.trim() || !perfil?.comunidad_id) return;
+    setSavingName(true);
+    await updateDoc(doc(db, 'comunidades', perfil.comunidad_id), {
+      nombre: comunidadNombre.trim(),
+    });
+    toast.success('Nombre actualizado');
+    setSavingName(false);
+    setEditingName(false);
+    window.location.reload();
   }
 
   const iniciales = perfil?.nombre_completo
@@ -87,11 +110,35 @@ export default function PerfilPage() {
       {(perfil?.comunidad as any)?.nombre && (
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-finca-coral" />
-              <p className="font-medium text-sm text-finca-dark">Mi comunidad</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-finca-coral" />
+                <p className="font-medium text-sm text-finca-dark">Mi comunidad</p>
+              </div>
+              {esAdmin && !editingName && (
+                <button onClick={startEditingName} className="text-muted-foreground hover:text-finca-coral transition-colors p-1">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <p className="text-sm text-muted-foreground">{(perfil?.comunidad as any)?.nombre}</p>
+            {editingName ? (
+              <div className="flex gap-2">
+                <Input
+                  value={comunidadNombre}
+                  onChange={(e) => setComunidadNombre(e.target.value)}
+                  className="h-9 text-sm"
+                  autoFocus
+                />
+                <Button size="icon" className="h-9 w-9 bg-finca-coral hover:bg-finca-coral/90 text-white shrink-0" onClick={saveNombre} disabled={savingName}>
+                  <Check className="w-4 h-4" />
+                </Button>
+                <Button size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => setEditingName(false)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">{(perfil?.comunidad as any)?.nombre}</p>
+            )}
             {(perfil?.comunidad as any)?.direccion && (
               <p className="text-xs text-muted-foreground">{(perfil?.comunidad as any)?.direccion}</p>
             )}
