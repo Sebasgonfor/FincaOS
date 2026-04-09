@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Users, Megaphone, Building2, Copy, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle } from 'lucide-react';
+import { FileText, Users, Megaphone, Building2, Share2, Vote, ChevronRight, Wallet, CircleCheck as CheckCircle2, Clock, CircleAlert as AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/firebase/client';
 import {
@@ -199,10 +199,14 @@ export default function ComunidadPage() {
     setVotando(null);
   }
 
-  async function copiarCodigo() {
-    if (comunidad?.codigo) {
-      navigator.clipboard.writeText(comunidad.codigo);
-      toast.success(`Código copiado: ${comunidad.codigo}`);
+  async function compartirLink() {
+    if (!comunidad?.codigo) return;
+    const url = `${window.location.origin}/invite/${comunidad.codigo}`;
+    if (navigator.share) {
+      navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: 'Únete a nuestra comunidad con este enlace:', url });
+    } else {
+      navigator.clipboard.writeText(url);
+      toast.success('Link de invitación copiado');
     }
   }
 
@@ -276,9 +280,9 @@ export default function ComunidadPage() {
                 </div>
               </div>
             </div>
-            <Button size="sm" variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30 shrink-0" onClick={copiarCodigo}>
-              <Copy className="w-3.5 h-3.5 mr-1.5" />
-              {comunidad.codigo}
+            <Button size="sm" variant="secondary" className="bg-white/20 text-white border-0 hover:bg-white/30 shrink-0" onClick={compartirLink}>
+              <Share2 className="w-3.5 h-3.5 mr-1.5" />
+              Invitar
             </Button>
           </CardContent>
         </Card>

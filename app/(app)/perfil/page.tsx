@@ -31,13 +31,17 @@ export default function PerfilPage() {
     router.replace('/login');
   }
 
-  async function copiarCodigo() {
+  async function compartirLink() {
     if (!perfil?.comunidad_id) return;
     const snap = await getDoc(doc(db, 'comunidades', perfil.comunidad_id));
     const codigo = snap.data()?.codigo;
-    if (codigo) {
-      navigator.clipboard.writeText(codigo);
-      toast.success(`Código copiado: ${codigo}`);
+    if (!codigo) return;
+    const url = `${window.location.origin}/invite/${codigo}`;
+    if (navigator.share) {
+      navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: 'Únete a nuestra comunidad con este enlace:', url });
+    } else {
+      navigator.clipboard.writeText(url);
+      toast.success('Link de invitación copiado');
     }
   }
 
@@ -95,10 +99,10 @@ export default function PerfilPage() {
               variant="outline"
               size="sm"
               className="border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white w-full"
-              onClick={copiarCodigo}
+              onClick={compartirLink}
             >
-              <Copy className="w-3.5 h-3.5 mr-2" />
-              Copiar código de invitación
+              <Share2 className="w-3.5 h-3.5 mr-2" />
+              Compartir link de invitación
             </Button>
           </CardContent>
         </Card>

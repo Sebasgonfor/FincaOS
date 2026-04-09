@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, UserPlus, Building2 } from 'lucide-react';
@@ -18,6 +18,7 @@ const googleProvider = new GoogleAuthProvider();
 
 export default function RegistroPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -27,6 +28,12 @@ export default function RegistroPage() {
   const [piso, setPiso] = useState('');
 
   const [codigoComunidad, setCodigoComunidad] = useState('');
+
+  // Pre-fill code from invite link
+  useEffect(() => {
+    const code = searchParams.get('codigo');
+    if (code) setCodigoComunidad(code.toUpperCase());
+  }, [searchParams]);
   const [nombreComunidad, setNombreComunidad] = useState('');
   const [direccion, setDireccion] = useState('');
   const [numViviendas, setNumViviendas] = useState('');

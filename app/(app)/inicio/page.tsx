@@ -78,13 +78,18 @@ export default function InicioPage() {
     setDataLoading(false);
   }
 
-  async function copiarCodigo() {
+  async function compartirLink() {
     if (!comunidadId) return;
     const comunidadSnap = await getDoc(doc(db, 'comunidades', comunidadId));
-    if (comunidadSnap.exists()) {
-      const codigo = comunidadSnap.data().codigo;
-      navigator.clipboard.writeText(codigo);
-      toast.success(`Código copiado: ${codigo}`);
+    if (!comunidadSnap.exists()) return;
+    const codigo = comunidadSnap.data().codigo;
+    const url = `${window.location.origin}/invite/${codigo}`;
+
+    if (navigator.share) {
+      navigator.share({ title: 'Únete a mi comunidad en FincaOS', text: `Únete a nuestra comunidad con este enlace:`, url });
+    } else {
+      navigator.clipboard.writeText(url);
+      toast.success('Link de invitación copiado');
     }
   }
 
@@ -251,11 +256,11 @@ export default function InicioPage() {
         <CardContent className="p-4 flex items-center justify-between gap-3">
           <div>
             <p className="font-medium text-sm text-finca-dark">Invita a tus vecinos</p>
-            <p className="text-xs text-muted-foreground">Comparte el código de acceso</p>
+            <p className="text-xs text-muted-foreground">Comparte el link de invitación</p>
           </div>
-          <Button size="sm" variant="outline" className="border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white" onClick={copiarCodigo}>
-            <Copy className="w-3.5 h-3.5 mr-1.5" />
-            Código
+          <Button size="sm" variant="outline" className="border-finca-coral text-finca-coral hover:bg-finca-coral hover:text-white" onClick={compartirLink}>
+            <Share2 className="w-3.5 h-3.5 mr-1.5" />
+            Invitar
           </Button>
         </CardContent>
       </Card>

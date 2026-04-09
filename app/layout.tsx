@@ -30,7 +30,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         {children}
-        <Toaster richColors position="top-center" />
+        <Toaster richColors position="top-center" toastOptions={{ className: 'max-w-lg mx-auto' }} />
       </body>
     </html>
   );
