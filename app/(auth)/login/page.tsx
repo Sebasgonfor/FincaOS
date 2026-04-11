@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result) return;
+        const user = result.user;
+        const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
+        if (!perfilSnap.exists()) {
+          await setDoc(doc(db, 'perfiles', user.uid), {
+            comunidad_id: null,
+            nombre_completo: user.displayName || 'Sin nombre',
+            numero_piso: null,
+            rol: 'vecino',
+            avatar_url: user.photoURL || null,
+            telefono: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          router.replace('/onboarding');
+        } else {
+          const data = perfilSnap.data();
+          router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
+        }
+      })
+      .catch(() => {
+        toast.error('Error al iniciar sesión con Google');
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -41,33 +71,11 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      // Check if profile exists, create if not
-      const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
-      if (!perfilSnap.exists()) {
-        await setDoc(doc(db, 'perfiles', user.uid), {
-          comunidad_id: null,
-          nombre_completo: user.displayName || 'Sin nombre',
-          numero_piso: null,
-          rol: 'vecino',
-          avatar_url: user.photoURL || null,
-          telefono: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        router.replace('/onboarding');
-      } else {
-        const data = perfilSnap.data();
-        router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
-      }
-    } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        toast.error('Error al iniciar sesión con Google');
-      }
+      await signInWithRedirect(auth, googleProvider);
+    } catch {
+      toast.error('Error al iniciar sesión con Google');
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
