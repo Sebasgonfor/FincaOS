@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -11,6 +11,8 @@ import {
   GoogleAuthProvider,
   signInWithRedirect,
   getRedirectResult,
+  setPersistence,
+  browserLocalPersistence,
 } from 'firebase/auth';
 import {
   doc,
@@ -47,6 +49,7 @@ const googleProvider = new GoogleAuthProvider();
 export default function RegistroPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const redirectHandled = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -67,15 +70,25 @@ export default function RegistroPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    // Evitar doble ejecución en React StrictMode (dev monta dos veces)
+    if (redirectHandled.current) return;
+    redirectHandled.current = true;
+
     setLoading(true);
     getRedirectResult(auth)
       .then(async (result) => {
-        if (!result?.user) return;
+        // Sin resultado pendiente de redirect → no hay nada que procesar
+        if (!result) {
+          return;
+        }
+
         const user = result.user;
 
+        // Recuperar el código de comunidad guardado antes del redirect
         const savedCodigo = sessionStorage.getItem('google_registro_codigo') || '';
         sessionStorage.removeItem('google_registro_codigo');
 
+        // Buscar la comunidad por código si existe
         let comunidadId: string | null = null;
         if (savedCodigo) {
           const q = query(
@@ -86,8 +99,11 @@ export default function RegistroPage() {
           if (!snap.empty) comunidadId = snap.docs[0].id;
         }
 
+        // Crear o actualizar perfil en Firestore
         const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
+
         if (!perfilSnap.exists()) {
+          // Usuario nuevo: crear perfil completo
           await setDoc(doc(db, 'perfiles', user.uid), {
             comunidad_id: comunidadId,
             nombre_completo: user.displayName || 'Sin nombre',
@@ -100,6 +116,7 @@ export default function RegistroPage() {
           });
           router.replace(comunidadId ? '/inicio' : '/onboarding');
         } else {
+          // Usuario existente: solo actualizar comunidad_id si no la tiene
           const data = perfilSnap.data();
           if (!data?.comunidad_id && comunidadId) {
             await updateDoc(doc(db, 'perfiles', user.uid), {
@@ -113,19 +130,20 @@ export default function RegistroPage() {
         }
       })
       .catch((err: any) => {
-        if (err.code) {
-          toast.error(`Error con Google: ${err.code}`);
-        }
+        toast.error(`Error con Google: ${err.code || err.message}`);
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleGoogleRegistro() {
+    // Guardar el código antes del redirect (el estado de React se pierde)
     if (codigoComunidad) {
       sessionStorage.setItem('google_registro_codigo', codigoComunidad);
     }
     setLoading(true);
     try {
+      // Forzar persistencia local para que Firebase mantenga la sesión durante el redirect
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       toast.error(`Error con Google: ${err.code || err.message}`);
