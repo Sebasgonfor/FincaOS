@@ -1,37 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import type { User } from 'firebase/auth';
 
 const googleProvider = new GoogleAuthProvider();
 
-function getGoogleAuthErrorMessage(code: string): string {
-  switch (code) {
-    case 'auth/unauthorized-domain':
-      return 'Este dominio no está autorizado en Firebase. Añádelo en Firebase Console > Authentication > Settings > Authorized domains.';
-    case 'auth/popup-blocked':
-      return 'El navegador bloqueó la ventana emergente. Redirigiendo...';
-    case 'auth/internal-error':
-      return 'Error interno de Firebase. Verifica que Google esté habilitado como proveedor en Firebase Console.';
-    case 'auth/network-request-failed':
-      return 'Error de red. Comprueba tu conexión a internet.';
-    case 'auth/user-disabled':
-      return 'Esta cuenta ha sido deshabilitada.';
-    case 'auth/operation-not-allowed':
-      return 'El inicio de sesión con Google no está habilitado. Actívalo en Firebase Console > Authentication > Sign-in method.';
-    default:
-      return 'Error al iniciar sesión con Google. Inténtalo de nuevo.';
+async function handleGoogleUser(user: { uid: string; displayName: string | null; photoURL: string | null }, router: ReturnType<typeof useRouter>) {
+  const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
+  if (!perfilSnap.exists()) {
+    await setDoc(doc(db, 'perfiles', user.uid), {
+      comunidad_id: null,
+      nombre_completo: user.displayName || 'Sin nombre',
+      numero_piso: null,
+      rol: 'vecino',
+      avatar_url: user.photoURL || null,
+      telefono: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    router.replace('/onboarding');
+  } else {
+    const data = perfilSnap.data();
+    router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
   }
 }
 
@@ -41,6 +41,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          await handleGoogleUser(result.user, router);
+        }
+      })
+      .catch((err: any) => {
+        if (err.code) {
+          toast.error(`Error con Google: ${err.code}`);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -61,31 +77,10 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-
-      // Check if profile exists, create if not
-      const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
-      if (!perfilSnap.exists()) {
-        await setDoc(doc(db, 'perfiles', user.uid), {
-          comunidad_id: null,
-          nombre_completo: user.displayName || 'Sin nombre',
-          numero_piso: null,
-          rol: 'vecino',
-          avatar_url: user.photoURL || null,
-          telefono: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        router.replace('/onboarding');
-      } else {
-        const data = perfilSnap.data();
-        router.replace(data?.comunidad_id ? '/inicio' : '/onboarding');
-      }
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        toast.error('Error al iniciar sesión con Google');
-      }
+      toast.error(`Error al iniciar sesión con Google: ${err.code || err.message}`);
+      setLoading(false);
     }
   }
 
