@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
 import { Button } from '@/components/ui/button';
@@ -15,7 +22,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 const googleProvider = new GoogleAuthProvider();
 
-async function handleGoogleUser(user: { uid: string; displayName: string | null; photoURL: string | null }, router: ReturnType<typeof useRouter>) {
+async function processGoogleUser(
+  user: { uid: string; displayName: string | null; photoURL: string | null },
+  router: ReturnType<typeof useRouter>
+) {
   const perfilSnap = await getDoc(doc(db, 'perfiles', user.uid));
   if (!perfilSnap.exists()) {
     await setDoc(doc(db, 'perfiles', user.uid), {
@@ -37,26 +47,31 @@ async function handleGoogleUser(user: { uid: string; displayName: string | null;
 
 export default function LoginPage() {
   const router = useRouter();
+  const redirectHandled = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Evitar doble ejecución en React StrictMode (dev monta dos veces)
+    if (redirectHandled.current) return;
+    redirectHandled.current = true;
+
     setLoading(true);
     getRedirectResult(auth)
       .then(async (result) => {
-        if (result?.user) {
-          await handleGoogleUser(result.user, router);
+        // Sin resultado pendiente de redirect → no hay nada que procesar
+        if (!result) {
+          return;
         }
+        await processGoogleUser(result.user, router);
       })
       .catch((err: any) => {
-        if (err.code) {
-          toast.error(`Error con Google: ${err.code}`);
-        }
+        toast.error(`Error con Google: ${err.code || err.message}`);
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -77,6 +92,8 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     try {
+      // Forzar persistencia local para que Firebase mantenga la sesión durante el redirect
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       toast.error(`Error al iniciar sesión con Google: ${err.code || err.message}`);
