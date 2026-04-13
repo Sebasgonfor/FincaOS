@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -8,10 +8,7 @@ import { Eye, EyeOff, LogIn } from 'lucide-react';
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
-  setPersistence,
-  browserLocalPersistence,
+  signInWithPopup,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase/client';
@@ -47,31 +44,10 @@ async function processGoogleUser(
 
 export default function LoginPage() {
   const router = useRouter();
-  const redirectHandled = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    // Evitar doble ejecución en React StrictMode (dev monta dos veces)
-    if (redirectHandled.current) return;
-    redirectHandled.current = true;
-
-    setLoading(true);
-    getRedirectResult(auth)
-      .then(async (result) => {
-        // Sin resultado pendiente de redirect → no hay nada que procesar
-        if (!result) {
-          return;
-        }
-        await processGoogleUser(result.user, router);
-      })
-      .catch((err: any) => {
-        toast.error(`Error con Google: ${err.code || err.message}`);
-      })
-      .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -92,13 +68,12 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true);
     try {
-      // Forzar persistencia local para que Firebase mantenga la sesión durante el redirect
-      await setPersistence(auth, browserLocalPersistence);
-      await signInWithRedirect(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      await processGoogleUser(result.user, router);
     } catch (err: any) {
       toast.error(`Error al iniciar sesión con Google: ${err.code || err.message}`);
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   return (
